@@ -1,0 +1,16 @@
+.root {
+    -fx-base: #f4f4f4;
+    -fx-background: #ffffff;
+    -fx-control-inner-background: #ffffff;
+    -fx-text-base-color: #202020;
+    -fx-accent: #0078d7;
+}
+.label, .text-area, .button, .list-view {
+    -fx-text-fill: #202020;
+}
+.text-area {
+    -fx-control-inner-background: #fafafa;
+}
+.button {
+    -fx-background-color: #e1e1e1;
+}

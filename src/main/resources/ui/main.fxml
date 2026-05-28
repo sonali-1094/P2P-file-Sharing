@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.chart.LineChart?>
+<?import javafx.scene.chart.NumberAxis?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.p2pfileshare.ui.MainController">
+    <top>
+        <HBox spacing="10">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+            <Label text="P2P File Share" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+            <Button fx:id="chooseFileButton" text="Choose File" onAction="#onChooseFile"/>
+            <Button fx:id="startSharingButton" text="Start Sharing" onAction="#onStartSharing"/>
+            <Button fx:id="startDiscoveryButton" text="Start Discovery" onAction="#onStartDiscovery"/>
+            <Button fx:id="refreshFilesButton" text="Refresh Files" onAction="#onRefreshFiles"/>
+            <Button fx:id="downloadButton" text="Download Selected" onAction="#onDownloadSelected"/>
+            <Button fx:id="toggleThemeButton" text="Toggle Theme" onAction="#onToggleTheme"/>
+        </HBox>
+    </top>
+    <center>
+        <SplitPane dividerPositions="0.3,0.7">
+            <VBox spacing="10">
+                <padding>
+                    <Insets top="10" right="10" bottom="10" left="10"/>
+                </padding>
+                <Label text="Peers" />
+                <ListView fx:id="peersList" prefHeight="300" />
+                <Label text="Transfers" />
+                <ListView fx:id="transfersList" prefHeight="200" />
+            </VBox>
+            <VBox spacing="10">
+                <padding>
+                    <Insets top="10" right="10" bottom="10" left="10"/>
+                </padding>
+                <Label text="Transfer Speed" />
+                <LineChart fx:id="speedChart" animated="false" createSymbols="false" prefHeight="300">
+                    <xAxis>
+                        <NumberAxis />
+                    </xAxis>
+                    <yAxis>
+                        <NumberAxis />
+                    </yAxis>
+                </LineChart>
+                <Label text="Files Available From Selected Peer" />
+                <ListView fx:id="remoteFilesList" prefHeight="150" />
+                <Label text="Overall Progress" />
+                <ProgressBar fx:id="overallProgress" prefWidth="600" progress="0" />
+                <Label fx:id="statusLabel" text="Ready" />
+            </VBox>
+        </SplitPane>
+    </center>
+    <bottom>
+        <VBox spacing="8">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+            <Label text="Log" />
+            <TextArea fx:id="logOutput" editable="false" prefRowCount="6" wrapText="true" />
+        </VBox>
+    </bottom>
+</BorderPane>
