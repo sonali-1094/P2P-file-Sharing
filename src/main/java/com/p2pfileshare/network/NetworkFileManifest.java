@@ -1,9 +1,9 @@
 package com.p2pfileshare.network;
 
+import java.util.List;
+
 import com.p2pfileshare.model.ChunkInfo;
 import com.p2pfileshare.model.FileManifest;
-
-import java.util.List;
 
 public record NetworkFileManifest(
         String fileId,
@@ -18,7 +18,7 @@ public record NetworkFileManifest(
                 manifest.getFileName(),
                 manifest.getFileSize(),
                 manifest.getChunkSize(),
-                manifest.getChunks()
+                List.copyOf(manifest.getChunks()) // FIX: defensive copy
         );
     }
 }

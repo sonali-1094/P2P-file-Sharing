@@ -17,30 +17,13 @@ public class FileManifest {
         this.filePath = filePath;
         this.fileSize = fileSize;
         this.chunkSize = chunkSize;
-        this.chunks = chunks;
+        this.chunks = List.copyOf(chunks); // FIX: defensive, unmodifiable copy
     }
 
-    public String getFileId() {
-        return fileId;
-    }
-
-    public String getFileName() {
-        return fileName;
-    }
-
-    public Path getFilePath() {
-        return filePath;
-    }
-
-    public long getFileSize() {
-        return fileSize;
-    }
-
-    public int getChunkSize() {
-        return chunkSize;
-    }
-
-    public List<ChunkInfo> getChunks() {
-        return chunks;
-    }
+    public String getFileId() { return fileId; }
+    public String getFileName() { return fileName; }
+    public Path getFilePath() { return filePath; }
+    public long getFileSize() { return fileSize; }
+    public int getChunkSize() { return chunkSize; }
+    public List<ChunkInfo> getChunks() { return chunks; }
 }

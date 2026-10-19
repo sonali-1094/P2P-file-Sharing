@@ -1,10 +1,14 @@
 package com.p2pfileshare.network;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.p2pfileshare.model.FileManifest;
-
-import java.io.*;
+import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.RandomAccessFile;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
@@ -12,12 +16,17 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.p2pfileshare.model.FileManifest;
+
 public class PeerServer {
     private final int port;
     private final Map<String, FileManifest> sharedManifests;
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private volatile boolean running;
-    private ServerSocket serverSocket;
+    // FIX: volatile so stop() always sees an up-to-date reference
+    private volatile ServerSocket serverSocket;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public PeerServer(int port, Map<String, FileManifest> sharedManifests) {
@@ -25,16 +34,24 @@ public class PeerServer {
         this.sharedManifests = sharedManifests;
     }
 
-    public void start() {
+    // FIX: open the socket synchronously in start() so stop() can never
+    // observe a null serverSocket after start() has returned.
+    public void start() throws IOException {
+        if (running) {
+            return;
+        }
         running = true;
+        serverSocket = new ServerSocket(port);
+        System.out.println("Peer server listening on port " + port);
         executor.submit(this::serveLoop);
     }
 
     public void stop() {
         running = false;
-        if (serverSocket != null) {
+        ServerSocket socket = serverSocket;
+        if (socket != null) {
             try {
-                serverSocket.close();
+                socket.close(); // unblocks accept() immediately
             } catch (IOException ignored) {
             }
         }
@@ -42,11 +59,9 @@ public class PeerServer {
     }
 
     private void serveLoop() {
-        try (ServerSocket socket = new ServerSocket(port)) {
-            serverSocket = socket;
-            System.out.println("Peer server listening on port " + port);
+        try {
             while (running) {
-                Socket clientSocket = socket.accept();
+                Socket clientSocket = serverSocket.accept();
                 executor.submit(() -> handleConnection(clientSocket));
             }
         } catch (IOException e) {
@@ -90,15 +105,6 @@ public class PeerServer {
             System.out.println("Incoming handshake from " + handshake.getPeerId() + " " + socket.getRemoteSocketAddress());
             HandshakeMessage response = new HandshakeMessage("server-peer", "1.0", new String[]{"manifest", "chunk-transfer"});
             writer.write(objectMapper.writeValueAsString(response));
-            writer.newLine();
-            writer.flush();
-
-            for (FileManifest manifest : sharedManifests.values()) {
-                writer.write(objectMapper.writeValueAsString(NetworkFileManifest.from(manifest)));
-                writer.newLine();
-                writer.flush();
-            }
-            writer.write("END_MANIFESTS");
             writer.newLine();
             writer.flush();
         } catch (IOException e) {

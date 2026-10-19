@@ -1,5 +1,6 @@
 package com.p2pfileshare.storage;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -26,9 +27,13 @@ public class TransferHistoryDao {
     }
 
     private void initialize() throws SQLException {
-        try {
-            Files.createDirectories(databasePath.getParent());
-        } catch (Exception ignored) {
+        Path parent = databasePath.getParent();
+        if (parent != null) {
+            try {
+                Files.createDirectories(parent);
+            } catch (IOException e) {
+                throw new SQLException("Could not create transfer history directory", e);
+            }
         }
         try (Connection conn = connection(); Statement stmt = conn.createStatement()) {
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS transfer_history (id INTEGER PRIMARY KEY AUTOINCREMENT, file_name TEXT NOT NULL, file_size INTEGER NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, status TEXT NOT NULL)");
