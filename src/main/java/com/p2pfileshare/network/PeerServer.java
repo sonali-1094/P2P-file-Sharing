@@ -23,15 +23,17 @@ import com.p2pfileshare.model.FileManifest;
 public class PeerServer {
     private final int port;
     private final Map<String, FileManifest> sharedManifests;
+    private final String peerId;
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private volatile boolean running;
     // FIX: volatile so stop() always sees an up-to-date reference
     private volatile ServerSocket serverSocket;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public PeerServer(int port, Map<String, FileManifest> sharedManifests) {
+    public PeerServer(int port, Map<String, FileManifest> sharedManifests, String peerId) {
         this.port = port;
         this.sharedManifests = sharedManifests;
+        this.peerId = peerId;
     }
 
     // FIX: open the socket synchronously in start() so stop() can never
@@ -103,7 +105,7 @@ public class PeerServer {
 
             HandshakeMessage handshake = objectMapper.readValue(firstLine, HandshakeMessage.class);
             System.out.println("Incoming handshake from " + handshake.getPeerId() + " " + socket.getRemoteSocketAddress());
-            HandshakeMessage response = new HandshakeMessage("server-peer", "1.0", new String[]{"manifest", "chunk-transfer"});
+            HandshakeMessage response = new HandshakeMessage(peerId, "1.0", new String[]{"manifest", "chunk-transfer"});
             writer.write(objectMapper.writeValueAsString(response));
             writer.newLine();
             writer.flush();

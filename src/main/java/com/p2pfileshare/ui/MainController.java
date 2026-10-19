@@ -87,6 +87,10 @@ public class MainController {
     private final TransferEngine transferEngine =
             new TransferEngine();
 
+    // One identity for this peer, shared by the server and discovery.
+    private final String peerId =
+            "peer-" + java.util.UUID.randomUUID();
+
     private PeerServer peerServer;
 
     private PeerDiscoveryService discoveryService;
@@ -254,7 +258,8 @@ public class MainController {
 
             discoveryService =
                     new PeerDiscoveryService(
-                            localPort
+                            localPort,
+                            peerId
                     );
 
             discoveryService.start();
@@ -731,7 +736,8 @@ public class MainController {
         peerServer =
                 new PeerServer(
                         localPort,
-                        sharedManifests
+                        sharedManifests,
+                        peerId
                 );
 
         try {

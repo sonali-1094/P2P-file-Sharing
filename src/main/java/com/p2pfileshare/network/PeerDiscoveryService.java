@@ -8,7 +8,6 @@ import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,7 +22,7 @@ public class PeerDiscoveryService {
     private static final int BUFFER_SIZE = 1024;
     private static final long PEER_TTL_MILLIS = 15_000; // FIX: expire peers not seen in 15s
     private final int announcedPort;
-    private final String localPeerId = "peer-" + UUID.randomUUID();
+    private final String localPeerId;
     private final ExecutorService discoveryExecutor = Executors.newFixedThreadPool(3, r -> {
         Thread t = new Thread(r, "peer-discovery");
         t.setDaemon(true);
@@ -33,8 +32,9 @@ public class PeerDiscoveryService {
     private final ConcurrentHashMap<Peer, Long> lastSeen = new ConcurrentHashMap<>(); // FIX: track freshness
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public PeerDiscoveryService(int announcedPort) {
+    public PeerDiscoveryService(int announcedPort, String localPeerId) {
         this.announcedPort = announcedPort;
+        this.localPeerId = localPeerId;
     }
 
     public void start() {

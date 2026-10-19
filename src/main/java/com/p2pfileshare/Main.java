@@ -3,6 +3,7 @@ package com.p2pfileshare;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -67,6 +68,9 @@ public class Main {
             );
         }
 
+        // One identity for this peer, shared by the server and discovery.
+        String peerId = "peer-" + UUID.randomUUID();
+
         // =========================
         // START PEER SERVER
         // =========================
@@ -74,7 +78,8 @@ public class Main {
         PeerServer peerServer =
                 new PeerServer(
                         DEFAULT_PORT,
-                        sharedManifests
+                        sharedManifests,
+                        peerId
                 );
 
         peerServer.start();
@@ -84,7 +89,7 @@ public class Main {
         // =========================
 
         PeerDiscoveryService discoveryService =
-                new PeerDiscoveryService(DEFAULT_PORT);
+                new PeerDiscoveryService(DEFAULT_PORT, peerId);
 
         discoveryService.start();
 
