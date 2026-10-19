@@ -1,4 +1,4 @@
-# P2P File Share
+﻿# P2P File Share
 
 A Java-based peer-to-peer file sharing prototype with LAN discovery, chunked transfer, JavaFX UI, and SQLite history.
 
@@ -6,17 +6,23 @@ A Java-based peer-to-peer file sharing prototype with LAN discovery, chunked tra
 
 Requires Java 21 and Maven.
 
+Build and test everything:
+
 ```bash
-mvn clean package
+mvn clean install
 ```
 
 ## Run UI mode
 
-Use Maven to run the JavaFX app, because Maven adds the JavaFX libraries from `pom.xml`:
+Run the desktop app:
 
 ```bash
-mvn javafx:run "-Djavafx.args=ui"
+mvn -pl desktop-ui javafx:run
 ```
+
+After changing `p2p-core` code, run `mvn install -DskipTests` before running the UI.
+
+### UI workflow
 
 ### UI workflow
 
@@ -26,19 +32,11 @@ mvn javafx:run "-Djavafx.args=ui"
 4. On the receiver, select the discovered peer, click **Refresh Files**, select a file, then click **Download Selected**.
 5. Downloaded files are saved to `Downloads/P2P File Share`.
 
-## Run CLI mode
-
-CLI mode starts a sharing peer for one file:
-
-```bash
-mvn javafx:run "-Djavafx.args=cli /path/to/share/file"
-```
-
 ## Project structure
 
-- `network/` — peer discovery, handshake, TCP peer server
-- `transfer/` — chunking and parallel download engine
-- `ui/` — JavaFX UI skeleton and themes
-- `storage/` — SQLite transfer history DAO
-- `model/` — peer, chunk, and manifest domain objects
-- `util/` — SHA-256 hashing and backoff utilities
+- p2p-core/ — peer discovery, chunked transfer engine, hashing, storage, models, and core tests
+- desktop-ui/ — JavaFX desktop client, FXML layout, and themes
+
+
+
+
