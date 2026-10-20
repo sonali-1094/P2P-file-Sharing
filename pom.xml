@@ -13,6 +13,7 @@
     <modules>
         <module>p2p-core</module>
         <module>desktop-ui</module>
+        <module>tracker-server</module>
     </modules>
 
     <properties>
