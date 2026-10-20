@@ -6,9 +6,14 @@ import java.io.UncheckedIOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.file.Path;
+import java.sql.SQLException;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -20,9 +25,13 @@ import com.p2pfileshare.model.Peer;
 import com.p2pfileshare.network.NetworkFileManifest;
 import com.p2pfileshare.network.PeerDiscoveryService;
 import com.p2pfileshare.network.PeerServer;
+import com.p2pfileshare.storage.TransferHistoryDao;
+import com.p2pfileshare.storage.TransferRecord;
 import com.p2pfileshare.transfer.FileChunker;
 import com.p2pfileshare.transfer.TransferEngine;
 
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.chart.LineChart;
@@ -34,6 +43,7 @@ import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextArea;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
+import javafx.util.Duration;
 
 public class MainController {
 
@@ -110,6 +120,37 @@ public class MainController {
     private final AtomicBoolean downloadInProgress =
             new AtomicBoolean(false);
 
+    // ------------------------------------------------------------
+    // Live speed chart state (only touched on the JavaFX thread)
+    // ------------------------------------------------------------
+
+    private XYChart.Series<Number, Number> speedSeries;
+
+    private Timeline speedTimeline;
+
+    private double latestProgress;
+
+    private long speedFileSize;
+
+    private double lastSampledBytes;
+
+    private long speedStartNanos;
+
+    private long lastSampleNanos;
+
+    // ------------------------------------------------------------
+    // Transfer history (SQLite)
+    // ------------------------------------------------------------
+
+    private static final int HISTORY_LIMIT = 20;
+
+    private static final DateTimeFormatter HISTORY_TIME =
+            DateTimeFormatter
+                    .ofPattern("dd MMM yyyy HH:mm")
+                    .withZone(ZoneId.systemDefault());
+
+    private TransferHistoryDao historyDao;
+
     // ============================================================
     // INITIALIZE
     // ============================================================
@@ -130,6 +171,8 @@ public class MainController {
         remoteFilesList.getItems().add(
                 "Select a peer and refresh files"
         );
+
+        initHistory();
 
         statusLabel.setText("Ready");
 
@@ -496,6 +539,10 @@ public class MainController {
 
         overallProgress.setProgress(0);
 
+        final Instant startedAt = Instant.now();
+
+        startSpeedTracking(manifest.fileSize());
+
         statusLabel.setText(
                 "Downloading "
                         + manifest.fileName()
@@ -515,12 +562,19 @@ public class MainController {
                         manifest,
                         downloadDirectory,
                         progress ->
-                                Platform.runLater(
-                                        () -> overallProgress
-                                                .setProgress(
-                                                        progress
-                                                )
-                                )
+                                Platform.runLater(() -> {
+
+                                    overallProgress
+                                            .setProgress(progress);
+
+                                    // Progress callbacks can arrive out
+                                    // of order; never go backwards.
+                                    latestProgress =
+                                            Math.max(
+                                                    latestProgress,
+                                                    progress
+                                            );
+                                })
                 )
                 .whenComplete(
                         (path, throwable) ->
@@ -528,6 +582,16 @@ public class MainController {
 
                                     downloadInProgress
                                             .set(false);
+
+                                    stopSpeedTracking();
+
+                                    recordTransfer(
+                                            manifest,
+                                            startedAt,
+                                            throwable == null
+                                                    ? "COMPLETED"
+                                                    : "FAILED"
+                                    );
 
                                     if (throwable != null) {
 
@@ -678,6 +742,8 @@ public class MainController {
 
         XYChart.Series<Number, Number> series =
                 new XYChart.Series<>();
+
+        speedSeries = series;
 
         series.setName(
                 "Download speed"
@@ -1076,10 +1142,215 @@ public class MainController {
     }
 
     // ============================================================
+    // LIVE SPEED CHART
+    // ============================================================
+
+    /**
+     * Starts sampling the download speed once per second.
+     * Speed is calculated from the progress callback:
+     * (bytes downloaded since last sample) / (seconds since last sample).
+     */
+    private void startSpeedTracking(long fileSize) {
+
+        stopSpeedTracking();
+
+        speedFileSize = fileSize;
+        latestProgress = 0;
+        lastSampledBytes = 0;
+        speedStartNanos = System.nanoTime();
+        lastSampleNanos = speedStartNanos;
+
+        if (speedSeries != null) {
+
+            speedSeries.getData().clear();
+
+            speedSeries.getData().add(
+                    new XYChart.Data<>(0, 0)
+            );
+        }
+
+        speedTimeline = new Timeline(
+                new KeyFrame(
+                        Duration.seconds(1),
+                        event -> sampleSpeed()
+                )
+        );
+
+        speedTimeline.setCycleCount(Timeline.INDEFINITE);
+
+        speedTimeline.play();
+    }
+
+    private void stopSpeedTracking() {
+
+        if (speedTimeline == null) {
+            return;
+        }
+
+        speedTimeline.stop();
+
+        speedTimeline = null;
+
+        // Final sample so the last part of the transfer is drawn.
+        sampleSpeed();
+    }
+
+    private void sampleSpeed() {
+
+        if (speedSeries == null) {
+            return;
+        }
+
+        long now = System.nanoTime();
+
+        double seconds =
+                (now - lastSampleNanos) / 1_000_000_000.0;
+
+        if (seconds <= 0) {
+            return;
+        }
+
+        double bytes = latestProgress * speedFileSize;
+
+        double kbPerSecond =
+                Math.max(
+                        0,
+                        (bytes - lastSampledBytes)
+                                / 1024.0
+                                / seconds
+                );
+
+        double elapsed =
+                (now - speedStartNanos) / 1_000_000_000.0;
+
+        speedSeries.getData().add(
+                new XYChart.Data<>(elapsed, kbPerSecond)
+        );
+
+        // Keep the chart readable on very long transfers.
+        if (speedSeries.getData().size() > 300) {
+
+            speedSeries.getData().remove(0);
+        }
+
+        lastSampledBytes = bytes;
+
+        lastSampleNanos = now;
+    }
+
+    // ============================================================
+    // TRANSFER HISTORY
+    // ============================================================
+
+    /**
+     * Opens the SQLite history database and shows the most
+     * recent transfers in the Transfers list.
+     */
+    private void initHistory() {
+
+        try {
+
+            Path dbFile =
+                    Path.of(
+                            System.getProperty("user.home"),
+                            ".p2pfileshare",
+                            "history.db"
+                    );
+
+            historyDao = new TransferHistoryDao(dbFile);
+
+            List<TransferRecord> recent =
+                    historyDao.findAll();
+
+            if (recent.isEmpty()) {
+                return;
+            }
+
+            transfersList
+                    .getItems()
+                    .remove("No active transfers");
+
+            int count =
+                    Math.min(recent.size(), HISTORY_LIMIT);
+
+            // findAll() is newest-first; show oldest-first.
+            for (int i = count - 1; i >= 0; i--) {
+
+                transfersList
+                        .getItems()
+                        .add(describeRecord(recent.get(i)));
+            }
+
+        } catch (SQLException e) {
+
+            historyDao = null;
+
+            appendLog(
+                    "Transfer history unavailable: "
+                            + e.getMessage()
+            );
+        }
+    }
+
+    private String describeRecord(TransferRecord record) {
+
+        return "History: "
+                + record.getFileName()
+                + " ("
+                + readableSize(record.getFileSize())
+                + ") - "
+                + record.getStatus()
+                + " - "
+                + HISTORY_TIME.format(record.getStartedAt());
+    }
+
+    /**
+     * Saves a finished (or failed) download without blocking
+     * the JavaFX thread.
+     */
+    private void recordTransfer(
+            NetworkFileManifest manifest,
+            Instant startedAt,
+            String status) {
+
+        TransferHistoryDao dao = historyDao;
+
+        if (dao == null) {
+            return;
+        }
+
+        TransferRecord record =
+                new TransferRecord(
+                        manifest.fileName(),
+                        manifest.fileSize(),
+                        startedAt,
+                        Instant.now(),
+                        status
+                );
+
+        CompletableFuture.runAsync(() -> {
+
+            try {
+
+                dao.save(record);
+
+            } catch (SQLException e) {
+
+                appendLog(
+                        "Could not save transfer history: "
+                                + e.getMessage()
+                );
+            }
+        });
+    }
+
+    // ============================================================
     // SHUTDOWN
     // ============================================================
 
     public void shutdown() {
+
+        stopSpeedTracking();
 
         stopDiscovery();
 
