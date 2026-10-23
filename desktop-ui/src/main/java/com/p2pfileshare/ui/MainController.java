@@ -47,6 +47,7 @@ import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.PasswordField;
+import javafx.scene.control.SplitPane;
 import javafx.scene.layout.Pane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
@@ -86,7 +87,7 @@ public class MainController {
     private TextArea logOutput;
 
     @FXML private Pane loginPane;
-    @FXML private Pane dashboardPane;
+    @FXML private SplitPane dashboardPane;
     @FXML private Pane topBar;
     @FXML private Pane bottomPane;
     @FXML private TextField emailField;
