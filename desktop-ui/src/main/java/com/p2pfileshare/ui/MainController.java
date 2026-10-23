@@ -19,6 +19,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.p2pfileshare.tracker.TrackerClient;
 
 import com.p2pfileshare.model.FileManifest;
 import com.p2pfileshare.model.Peer;
@@ -41,6 +45,9 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.control.PasswordField;
+import javafx.scene.layout.Pane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.util.Duration;
@@ -77,6 +84,28 @@ public class MainController {
 
     @FXML
     private TextArea logOutput;
+
+    @FXML private Pane loginPane;
+    @FXML private Pane dashboardPane;
+    @FXML private Pane topBar;
+    @FXML private Pane bottomPane;
+    @FXML private TextField emailField;
+    @FXML private PasswordField passwordField;
+    @FXML private Label loginErrorLabel;
+    @FXML private TextField fileSearchField;
+    @FXML private ListView<String> onlinePeersList;
+    @FXML private ListView<String> trackerTransfersList;
+    @FXML private ListView<String> trackerFilesList;
+
+    private final TrackerClient tracker = new TrackerClient();
+    private final ExecutorService trackerExecutor = Executors.newFixedThreadPool(3, r -> {
+        Thread thread = new Thread(r, "tracker-http"); thread.setDaemon(true); return thread;
+    });
+    private final ScheduledExecutorService heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "tracker-heartbeat"); thread.setDaemon(true); return thread;
+    });
+    private final Map<Long, JsonNode> trackerFilesById = new ConcurrentHashMap<>();
+    private volatile boolean authenticated;
 
     // ============================================================
     // APPLICATION STATE
@@ -160,6 +189,26 @@ public class MainController {
 
         setupChart();
 
+        showLogin();
+        heartbeatExecutor.scheduleAtFixedRate(() -> {
+            if (authenticated) trackerExecutor.execute(() -> trackerCall(() -> tracker.heartbeat(peerId, localPort, null)));
+        }, 0, 20, TimeUnit.SECONDS);
+
+        trackerFilesList.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, value) -> {
+            if (value == null) return;
+            try {
+                long id = Long.parseLong(value.substring(0, value.indexOf(" |")));
+                trackerExecutor.execute(() -> trackerCall(() -> {
+                    JsonNode sources = tracker.sources(id);
+                    Platform.runLater(() -> {
+                        onlinePeersList.getItems().setAll();
+                        sources.forEach(peer -> onlinePeersList.getItems().add(peer.path("peerUid").asText() + " @ " + peer.path("ipAddress").asText() + ":" + peer.path("port").asInt()));
+                    });
+                    return sources;
+                }));
+            } catch (RuntimeException ignored) { }
+        });
+
         peersList.getItems().add(
                 "No peers discovered yet"
         );
@@ -223,12 +272,12 @@ public class MainController {
             return;
         }
 
-        try {
-
-            FileManifest manifest =
-                    FileChunker.buildManifest(
-                            file.toPath()
-                    );
+        statusLabel.setText("Preparing file metadata...");
+        trackerExecutor.execute(() -> {
+          try {
+            FileManifest manifest = FileChunker.buildManifest(file.toPath());
+            JsonNode registered = tracker.registerFile(manifest);
+            Platform.runLater(() -> {
 
             sharedManifests.put(
                     manifest.getFileId(),
@@ -253,29 +302,136 @@ public class MainController {
                                     + ")"
                     );
 
-            statusLabel.setText(
-                    "File ready to share"
-            );
+            statusLabel.setText("Registered with tracker (ID " + registered.path("id").asLong() + ")");
 
             appendLog(
                     "Selected file for sharing: "
                             + manifest.getFileName()
             );
 
-        } catch (
-                IOException |
-                IllegalArgumentException e
-        ) {
+            });
+          } catch (Exception e) {
+            if (e instanceof TrackerClient.UnauthorizedException) reportTrackerError(e);
+            else Platform.runLater(() -> {
+                statusLabel.setText("Could not share file");
+                appendLog("Could not prepare/register file: " + message(e));
+            });
+          }
+        });
+    }
 
-            statusLabel.setText(
-                    "Could not share file"
-            );
+    @FXML protected void onLogin() {
+        authenticate(false);
+    }
 
-            appendLog(
-                    "Could not prepare file: "
-                            + e.getMessage()
-            );
+    @FXML protected void onRegister() {
+        authenticate(true);
+    }
+
+    private void authenticate(boolean register) {
+        String email = emailField.getText() == null ? "" : emailField.getText().trim();
+        char[] password = passwordField.getText() == null ? new char[0] : passwordField.getText().toCharArray();
+        passwordField.clear();
+        loginErrorLabel.setText(register ? "Registering..." : "Signing in...");
+        trackerExecutor.execute(() -> {
+            try {
+                if (register) {
+                    tracker.register(email, password);
+                    Platform.runLater(() -> loginErrorLabel.setText("Account created. Sign in with your credentials."));
+                } else {
+                    tracker.login(email, password);
+                    authenticated = true;
+                    Platform.runLater(() -> {
+                        showDashboard();
+                        statusLabel.setText("Connected to tracker");
+                        refreshTrackerDashboard("");
+                    });
+                }
+            } catch (Exception e) { Platform.runLater(() -> loginErrorLabel.setText(message(e))); }
+            finally { java.util.Arrays.fill(password, '\0'); }
+        });
+    }
+
+    @FXML protected void onLogout() {
+        authenticated = false;
+        tracker.logout();
+        showLogin();
+    }
+
+    @FXML protected void onSearchTrackerFiles() {
+        if (authenticated) refreshTrackerDashboard(fileSearchField.getText());
+    }
+
+    @FXML protected void onStartTrackerTransfer() {
+        String selected = trackerFilesList.getSelectionModel().getSelectedItem();
+        if (selected == null || !selected.contains(" |")) {
+            statusLabel.setText("Select a tracker file first");
+            return;
         }
+        long fileId;
+        try { fileId = Long.parseLong(selected.substring(0, selected.indexOf(" |"))); }
+        catch (NumberFormatException e) { statusLabel.setText("Select a tracker file first"); return; }
+        trackerExecutor.execute(() -> trackerCall(() -> {
+            JsonNode started = tracker.createTransfer(fileId, null);
+            Platform.runLater(() -> statusLabel.setText("Tracker transfer started for " + started.path("fileName").asText("selected file")));
+            refreshTrackerDashboard(fileSearchField.getText());
+            return started;
+        }));
+    }
+
+    private void refreshTrackerDashboard(String search) {
+        trackerExecutor.execute(() -> {
+            try {
+                JsonNode files = tracker.listFiles(search, 0, 50);
+                JsonNode peers = tracker.onlinePeers();
+                JsonNode transfers = tracker.transfers();
+                Platform.runLater(() -> {
+                    trackerFilesById.clear(); trackerFilesList.getItems().clear();
+                    files.path("content").forEach(file -> {
+                        long id = file.path("id").asLong(); trackerFilesById.put(id, file);
+                        trackerFilesList.getItems().add(id + " | " + file.path("name").asText() + " (" + file.path("sizeBytes").asLong() + " bytes) · " + file.path("ownerEmail").asText());
+                    });
+                    onlinePeersList.getItems().setAll();
+                    peers.forEach(peer -> onlinePeersList.getItems().add(peer.path("peerUid").asText() + " @ " + peer.path("ipAddress").asText() + ":" + peer.path("port").asInt()));
+                    trackerTransfersList.getItems().setAll();
+                    transfers.path("content").forEach(transfer -> trackerTransfersList.getItems().add(transfer.path("fileName").asText() + " · " + transfer.path("status").asText() + " · " + transfer.path("startedAt").asText()));
+                    if (files.path("content").isEmpty()) trackerFilesList.getItems().add("No files found");
+                    if (peers.isEmpty()) onlinePeersList.getItems().add("No online peers");
+                    if (transfers.path("content").isEmpty()) trackerTransfersList.getItems().add("No transfers");
+                });
+            } catch (Exception e) { reportTrackerError(e); }
+        });
+    }
+
+    private void showLogin() {
+        if (loginPane == null) return;
+        loginPane.setVisible(true); loginPane.setManaged(true);
+        dashboardPane.setVisible(false); dashboardPane.setManaged(false);
+        topBar.setVisible(false); topBar.setManaged(false);
+        bottomPane.setVisible(false); bottomPane.setManaged(false);
+    }
+
+    private void showDashboard() {
+        loginPane.setVisible(false); loginPane.setManaged(false);
+        dashboardPane.setVisible(true); dashboardPane.setManaged(true);
+        topBar.setVisible(true); topBar.setManaged(true);
+        bottomPane.setVisible(true); bottomPane.setManaged(true);
+    }
+
+    @FunctionalInterface private interface TrackerCall<T> { T run() throws Exception; }
+    private <T> T trackerCall(TrackerCall<T> call) {
+        try { return call.run(); } catch (Exception e) { reportTrackerError(e); return null; }
+    }
+    private void reportTrackerError(Exception error) {
+        Platform.runLater(() -> {
+            if (error instanceof TrackerClient.UnauthorizedException) { authenticated = false; showLogin(); loginErrorLabel.setText(error.getMessage()); }
+            else { statusLabel.setText("Tracker error"); appendLog("Tracker request failed: " + message(error)); }
+        });
+    }
+    private static String message(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) current = current.getCause();
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
     }
 
     // ============================================================

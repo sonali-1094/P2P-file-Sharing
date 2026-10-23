@@ -1,167 +1,23 @@
-<?xml version="1.0" encoding="UTF-8"?>
-
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.chart.LineChart?>
 <?import javafx.scene.chart.NumberAxis?>
-<?import javafx.scene.control.Button?>
-<?import javafx.scene.control.Label?>
-<?import javafx.scene.control.ListView?>
-<?import javafx.scene.control.ProgressBar?>
-<?import javafx.scene.control.SplitPane?>
-<?import javafx.scene.control.TextArea?>
-<?import javafx.scene.layout.BorderPane?>
-<?import javafx.scene.layout.HBox?>
-<?import javafx.scene.layout.VBox?>
-
-<BorderPane xmlns="http://javafx.com/javafx/21"
-            xmlns:fx="http://javafx.com/fxml/1"
-            fx:controller="com.p2pfileshare.ui.MainController">
-
-    <!-- ========================= TOP BAR ========================= -->
-    <top>
-        <HBox spacing="10">
-            <padding>
-                <Insets top="10" right="10" bottom="10" left="10"/>
-            </padding>
-
-            <Label text="P2P File Share"
-                   style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
-
-            <Button fx:id="chooseFileButton"
-                    text="Choose File"
-                    onAction="#onChooseFile"/>
-
-            <Button fx:id="startSharingButton"
-                    text="Start Sharing"
-                    onAction="#onStartSharing"/>
-
-            <Button fx:id="startDiscoveryButton"
-                    text="Start Discovery"
-                    onAction="#onStartDiscovery"/>
-
-            <Button fx:id="stopButton"
-                    text="Stop"
-                    onAction="#onStop"/>
-
-            <Button fx:id="refreshFilesButton"
-                    text="Refresh Files"
-                    onAction="#onRefreshFiles"/>
-
-            <Button fx:id="downloadButton"
-                    text="Download Selected"
-                    onAction="#onDownloadSelected"/>
-
-            <!-- Pause Download -->
-            <Button fx:id="pauseDownloadButton"
-                    text="Pause"
-                    onAction="#onPauseDownload"/>
-
-            <!-- Resume Download -->
-            <Button fx:id="resumeDownloadButton"
-                    text="Resume"
-                    onAction="#onResumeDownload"/>
-
-            <Button fx:id="downloadFolderButton"
-                    text="Download Folder"
-                    onAction="#onChooseDownloadFolder"/>
-
-            <Button fx:id="toggleThemeButton"
-                    text="Toggle Theme"
-                    onAction="#onToggleTheme"/>
-        </HBox>
-    </top>
-
-
-    <!-- ========================= CENTER ========================= -->
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<BorderPane fx:id="rootPane" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.p2pfileshare.ui.MainController">
+    <top><HBox fx:id="topBar" spacing="8"><padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+        <Label text="P2P File Share" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+        <Button text="Register File" onAction="#onChooseFile"/><Button text="Start Sharing" onAction="#onStartSharing"/><Button text="Start Discovery" onAction="#onStartDiscovery"/><Button text="Stop" onAction="#onStop"/><Button text="Refresh Files" onAction="#onRefreshFiles"/><Button text="Download Selected" onAction="#onDownloadSelected"/><Button text="Pause" onAction="#onPauseDownload"/><Button text="Resume" onAction="#onResumeDownload"/><Button text="Download Folder" onAction="#onChooseDownloadFolder"/><Button text="Toggle Theme" onAction="#onToggleTheme"/><Button text="Sign out" onAction="#onLogout"/>
+    </HBox></top>
     <center>
-        <SplitPane dividerPositions="0.3,0.7">
-
-            <!-- ================= LEFT PANEL ================= -->
-            <VBox spacing="10">
-                <padding>
-                    <Insets top="10" right="10" bottom="10" left="10"/>
-                </padding>
-
-                <Label text="Peers"/>
-
-                <ListView fx:id="peersList"
-                          prefHeight="300"/>
-
-                <Label text="Transfers"/>
-
-                <ListView fx:id="transfersList"
-                          prefHeight="200"/>
-            </VBox>
-
-
-            <!-- ================= RIGHT PANEL ================= -->
-            <VBox spacing="10">
-                <padding>
-                    <Insets top="10" right="10" bottom="10" left="10"/>
-                </padding>
-
-                <Label text="Transfer Speed"/>
-
-                <LineChart fx:id="speedChart"
-                           animated="false"
-                           createSymbols="false"
-                           prefHeight="300">
-
-                    <xAxis>
-                        <NumberAxis/>
-                    </xAxis>
-
-                    <yAxis>
-                        <NumberAxis/>
-                    </yAxis>
-
-                </LineChart>
-
-
-                <Label text="Files Available From Selected Peer"/>
-
-                <ListView fx:id="remoteFilesList"
-                          prefHeight="150"/>
-
-
-                <Label text="Overall Progress"/>
-
-                <ProgressBar fx:id="overallProgress"
-                             prefWidth="600"
-                             progress="0"/>
-
-
-                <Label fx:id="localAddressLabel"
-                       text="Local endpoint: not started"/>
-
-                <Label fx:id="downloadFolderLabel"
-                       text="Download folder: default"/>
-
-                <Label fx:id="statusLabel"
-                       text="Ready"/>
-
-            </VBox>
-
+        <VBox fx:id="loginPane" alignment="CENTER" spacing="12" visible="false" managed="false">
+            <Label text="Tracker sign in" style="-fx-font-size: 20px; -fx-font-weight: bold;"/><TextField fx:id="emailField" promptText="Email" maxWidth="320"/><PasswordField fx:id="passwordField" promptText="Password" maxWidth="320"/>
+            <HBox alignment="CENTER" spacing="8"><Button text="Log in" onAction="#onLogin"/><Button text="Register" onAction="#onRegister"/></HBox><Label fx:id="loginErrorLabel" wrapText="true" maxWidth="360"/>
+        </VBox>
+        <SplitPane fx:id="dashboardPane" dividerPositions="0.3,0.7">
+            <VBox spacing="8"><padding><Insets top="10" right="10" bottom="10" left="10"/></padding><Label text="Online Tracker Peers"/><ListView fx:id="onlinePeersList" prefHeight="110"/><Label text="Discovered Peers"/><ListView fx:id="peersList" prefHeight="180"/><Label text="My Tracker Transfers"/><ListView fx:id="trackerTransfersList" prefHeight="130"/><Label text="Local Transfers"/><ListView fx:id="transfersList" prefHeight="150"/></VBox>
+            <VBox spacing="8"><padding><Insets top="10" right="10" bottom="10" left="10"/></padding><Label text="Transfer Speed"/><LineChart fx:id="speedChart" animated="false" createSymbols="false" prefHeight="250"><xAxis><NumberAxis/></xAxis><yAxis><NumberAxis/></yAxis></LineChart><Label text="Tracker Files"/><HBox spacing="8"><TextField fx:id="fileSearchField" promptText="Search files"/><Button text="Search" onAction="#onSearchTrackerFiles"/></HBox><ListView fx:id="trackerFilesList" prefHeight="120"/><Button text="Start Tracker Transfer" onAction="#onStartTrackerTransfer"/><Label text="Files Available From Selected Peer"/><ListView fx:id="remoteFilesList" prefHeight="120"/><Label text="Overall Progress"/><ProgressBar fx:id="overallProgress" prefWidth="600" progress="0"/><Label fx:id="localAddressLabel" text="Local endpoint: not started"/><Label fx:id="downloadFolderLabel" text="Download folder: default"/><Label fx:id="statusLabel" text="Ready"/></VBox>
         </SplitPane>
     </center>
-
-
-    <!-- ========================= BOTTOM ========================= -->
-    <bottom>
-        <VBox spacing="8">
-
-            <padding>
-                <Insets top="10" right="10" bottom="10" left="10"/>
-            </padding>
-
-            <Label text="Log"/>
-
-            <TextArea fx:id="logOutput"
-                      editable="false"
-                      prefRowCount="6"
-                      wrapText="true"/>
-
-        </VBox>
-    </bottom>
-
+    <bottom><VBox fx:id="bottomPane" spacing="8"><padding><Insets top="10" right="10" bottom="10" left="10"/></padding><Label text="Log"/><TextArea fx:id="logOutput" editable="false" prefRowCount="6" wrapText="true"/></VBox></bottom>
 </BorderPane>
